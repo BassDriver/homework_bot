@@ -1,6 +1,6 @@
 import logging
 import os
-import requests 
+import requests
 import sys
 import time
 
@@ -38,7 +38,7 @@ logger.addHandler(handler)
 
 
 def send_message(bot, message):
-    """Отправка сообщения ботом"""
+    """Отправка сообщения ботом."""
     try:
         bot.send_message(
             chat_id=TELEGRAM_CHAT_ID,
@@ -46,11 +46,14 @@ def send_message(bot, message):
         )
         logger.info(f'Бот отправил сообщение "{message}"')
     except Exception as error:
-        logger.error(f'При отправке сообщения "{message}" возникла ошибка "{error}".')
+        logger.error(
+            f'При отправке сообщения "{message}"'
+            f'возникла ошибка "{error}".'
+        )
 
 
 def get_api_answer(timestamp):
-    """Обработка ответа от API"""
+    """Обработка ответа от API."""
     from_date = timestamp or int(time.time())
     params = {'from_date': from_date}
     response = requests.get(ENDPOINT, headers=HEADERS, params=params)
@@ -67,7 +70,7 @@ def get_api_answer(timestamp):
 
 
 def check_response(response):
-    """Проверка ответа на запрос"""
+    """Проверка ответа на запрос."""
     if not type(response) is dict:
         logger.error('Ответ не в формате dict')
         raise TypeError('Ответ не в формате dict')
@@ -78,7 +81,7 @@ def check_response(response):
 
 
 def parse_status(homework):
-    """Обработка ответа и получение информации"""
+    """Обработка ответа и получение информации."""
     if not homework.get('status'):
         logger.error('Отсутствует данные "status"')
         raise KeyError('Отсутствуют данные "status"')
@@ -92,7 +95,7 @@ def parse_status(homework):
 
 
 def check_tokens():
-    """Проверка токенов"""
+    """Проверка токенов."""
     TOKENS = [
         [PRACTICUM_TOKEN, 'practicum token'],
         [TELEGRAM_TOKEN, 'telegram token'],
