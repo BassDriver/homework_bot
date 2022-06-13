@@ -80,7 +80,7 @@ def send_message(bot, message):
         )
         raise TelegramError(
             TELEGRAM_ERROR.format(message=message, error=error)
-            )
+        )
 
 
 def get_api_answer(timestamp):
