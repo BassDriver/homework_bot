@@ -85,7 +85,7 @@ def get_api_answer(timestamp):
         if response.status_code != 200:
             raise requests.HTTPError(
                 HTTP_ERROR.format(
-                    endpoint=ENDPOINT, headers=HEADERS, 
+                    endpoint=ENDPOINT, headers=HEADERS,
                     params=params, code=response.status_code
                 )
             )
@@ -96,9 +96,9 @@ def check_response(response):
     """Проверка ответа на запрос."""
     if not isinstance(response, dict):
         raise TypeError(RESP_NOT_DICT.format(type=dict))
-    if not KEY in response:
+    if KEY not in response:
         raise KeyError(KEY_NOT_IN_RESP.format(key=KEY))
-    homeworks=response.get('homeworks')
+    homeworks = response.get('homeworks')
     if not type(homeworks) is list:
         raise TypeError(HOMEWORKS_ERROR.format(type=list))
     return homeworks
@@ -153,7 +153,7 @@ def main():
                 except Exception as error:
                     logger.exception(
                         TELEGRAM_ERROR.format(message=message, error=error)
-                )
+                    )
                 else:
                     prev_message = message
                     logger.info(MESSAGE_ERROR_SENT.format(message=message))
@@ -168,7 +168,7 @@ def main():
                 except Exception as error:
                     logger.exception(
                         TELEGRAM_ERROR.format(message=message, error=error)
-                )
+                    )
                 else:
                     prev_message = message
                     logger.info(MESSAGE_SENT.format(message=message))
