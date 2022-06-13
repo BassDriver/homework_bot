@@ -7,7 +7,7 @@ import time
 from dotenv import load_dotenv
 from logging import FileHandler, StreamHandler
 from requests.exceptions import RequestException
-from telegram import Bot
+from telegram import Bot, TelegramError
 
 load_dotenv()
 
@@ -68,10 +68,19 @@ logger.addHandler(file_handler)
 
 def send_message(bot, message):
     """Отправка сообщения ботом."""
-    bot.send_message(
-        chat_id=TELEGRAM_CHAT_ID,
-        text=message
-    )
+    try:
+        bot.send_message(
+            chat_id=TELEGRAM_CHAT_ID,
+            text=message
+        )
+        logger.info(MESSAGE_SENT.format(message=message))
+    except Exception as error:
+        logger.exception(
+            TELEGRAM_ERROR.format(message=message, error=error)
+        )
+        raise TelegramError(
+            TELEGRAM_ERROR.format(message=message, error=error)
+            )
 
 
 def get_api_answer(timestamp):
@@ -148,31 +157,17 @@ def main():
             message = MESSAGE_ERROR.format(error=error)
             logger.error(message)
             if message != prev_message:
-                try:
-                    send_message(bot, message)
-                except Exception as error:
-                    logger.exception(
-                        TELEGRAM_ERROR.format(message=message, error=error)
-                    )
-                else:
-                    prev_message = message
-                    logger.info(MESSAGE_ERROR_SENT.format(message=message))
-                    time.sleep(RETRY_TIME)
+                send_message(bot, message)
+                prev_message = message
+                time.sleep(RETRY_TIME)
             else:
                 time.sleep(RETRY_TIME)
 
         else:
             if message != prev_message:
-                try:
-                    send_message(bot, message)
-                except Exception as error:
-                    logger.exception(
-                        TELEGRAM_ERROR.format(message=message, error=error)
-                    )
-                else:
-                    prev_message = message
-                    logger.info(MESSAGE_SENT.format(message=message))
-                    time.sleep(RETRY_TIME)
+                send_message(bot, message)
+                prev_message = message
+                time.sleep(RETRY_TIME)
             else:
                 time.sleep(RETRY_TIME)
 
