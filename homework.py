@@ -6,8 +6,7 @@ import time
 
 from dotenv import load_dotenv
 from logging import FileHandler, StreamHandler
-from requests.exceptions import RequestException
-from telegram import Bot, TelegramError
+from telegram import Bot
 
 load_dotenv()
 
@@ -32,18 +31,22 @@ HOMEWORK_VERDICTS = {
     'rejected': 'Работа проверена: у ревьюера есть замечания.'
 }
 
-API_NOT_AVL = 'Сервис недоступен {error}'
-HTTP_ERROR = (
+API_NOT_AVAILABLE = (
+    'При запросе к ресурсу {endpoint} c параметрами {headers} и {params}'
+    ' сервис недоступен {code}'
+)
+CONNECTION_ERROR = (
     'При запросе к ресурсу {endpoint} c параметрами {headers} и {params}'
     ' вернулся код ответа {code}'
 )
-RESP_NOT_DICT = 'Ответ не в ожидаемом формате {type}'
-KEY = 'homeworks'
-KEY_NOT_IN_RESP = 'В ответе отсутствует ключ {key}'
+API_REJECTION = 'Ресурс вернул отказ в обслуживании, в ответе есть ключ "{key}"'
+RESPONSE_NOT_DICT = 'Ответ не в ожидаемом формате {type}'
+KEY_NOT_IN_RESPONSE = 'В ответе отсутствует ключ {key}'
 HOMEWORKS_ERROR = 'Список работ не в формате {type}'
-VERDICT_ERROR = 'Получен неизвестный статус работы'
+VERDICT_ERROR = 'Получен неизвестный статус работы {status}'
 TOKEN_ERROR = 'Отсутствует переменная окружения {name}'
 NO_HOMEWORKS = 'Отсутствуют данные о домашних работах'
+HOMEWORK_STATUS_CHANGE = 'Изменился статус проверки работы "{name}". {verdict}'
 MESSAGE_ERROR = 'Сбой в работе программы: {error}'
 MESSAGE_ERROR_SENT = 'Сообщение об ошибке "{message}" успешно отправлено'
 MESSAGE_SENT = 'Сообщение "{message}" успешно отправлено'
@@ -68,6 +71,7 @@ logger.addHandler(file_handler)
 
 def send_message(bot, message):
     """Отправка сообщения ботом."""
+    sent_message = False
     try:
         bot.send_message(
             chat_id=TELEGRAM_CHAT_ID,
@@ -78,9 +82,10 @@ def send_message(bot, message):
         logger.exception(
             TELEGRAM_ERROR.format(message=message, error=error)
         )
-        raise TelegramError(
-            TELEGRAM_ERROR.format(message=message, error=error)
-        )
+    else:
+        sent_message = True
+
+    return sent_message
 
 
 def get_api_answer(timestamp):
@@ -88,25 +93,34 @@ def get_api_answer(timestamp):
     params = {'from_date': timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    except requests.exceptions.RequestException as error:
-        raise RequestException(API_NOT_AVL.format(error=error))
-    else:
-        if response.status_code != 200:
-            raise requests.HTTPError(
-                HTTP_ERROR.format(
-                    endpoint=ENDPOINT, headers=HEADERS,
-                    params=params, code=response.status_code
-                )
+    except requests.ConnectionError as error:
+        raise ConnectionError(
+            API_NOT_AVAILABLE.format(
+            endpoint=ENDPOINT, headers=HEADERS,
+            params=params, code=error)
+        )
+    
+    if response.status_code != 200:
+        raise ConnectionError(
+            CONNECTION_ERROR.format(
+                endpoint=ENDPOINT, headers=HEADERS,
+                params=params, code=response.status_code
             )
-        return response.json()
+        )
+    if 'code' in response.json():
+        raise requests.HTTPError(API_REJECTION.format(key='code'))
+    elif 'error' in response.json():
+        raise requests.HTTPError(API_REJECTION.format(key='error'))
+
+    return response.json()
 
 
 def check_response(response):
     """Проверка ответа на запрос."""
     if not isinstance(response, dict):
-        raise TypeError(RESP_NOT_DICT.format(type=dict))
-    if KEY not in response:
-        raise KeyError(KEY_NOT_IN_RESP.format(key=KEY))
+        raise TypeError(RESPONSE_NOT_DICT.format(type=dict))
+    if 'homeworks' not in response:
+        raise KeyError(KEY_NOT_IN_RESPONSE.format(key='homeworks'))
     homeworks = response.get('homeworks')
     if not type(homeworks) is list:
         raise TypeError(HOMEWORKS_ERROR.format(type=list))
@@ -117,11 +131,11 @@ def parse_status(homework):
     """Обработка ответа и получение информации."""
     name = homework['homework_name']
     status = homework['status']
+    if status not in HOMEWORK_VERDICTS:
+        raise ValueError(VERDICT_ERROR.format(status=status))
     verdict = HOMEWORK_VERDICTS.get(status)
-    if verdict is None:
-        raise KeyError(VERDICT_ERROR)
 
-    return f'Изменился статус проверки работы "{name}". {verdict}'
+    return HOMEWORK_STATUS_CHANGE.format(name=name, verdict=verdict)
 
 
 def check_tokens():
@@ -151,25 +165,23 @@ def main():
             if not homeworks:
                 raise ValueError(NO_HOMEWORKS)
             message = parse_status(homeworks[0])
-            current_timestamp = response.get('current_date', current_timestamp)
+            current_timestamp = 0 # response.get('current_date', current_timestamp)
 
         except Exception as error:
             message = MESSAGE_ERROR.format(error=error)
             logger.error(message)
             if message != prev_message:
-                send_message(bot, message)
-                prev_message = message
-                time.sleep(RETRY_TIME)
-            else:
-                time.sleep(RETRY_TIME)
+                sent_message = send_message(bot, message)
+                if sent_message is True:
+                    prev_message = message
 
         else:
             if message != prev_message:
-                send_message(bot, message)
-                prev_message = message
-                time.sleep(RETRY_TIME)
-            else:
-                time.sleep(RETRY_TIME)
+                sent_message = send_message(bot, message)
+                if sent_message is True:
+                    prev_message = message
+
+        time.sleep(RETRY_TIME)
 
 
 if __name__ == '__main__':
