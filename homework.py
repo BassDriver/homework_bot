@@ -39,7 +39,9 @@ CONNECTION_ERROR = (
     'При запросе к ресурсу {endpoint} c параметрами {headers} и {params}'
     ' вернулся код ответа {code}'
 )
-API_REJECTION = 'Ресурс вернул отказ в обслуживании, в ответе есть ключ "{key}"'
+API_REJECTION = (
+    'Ресурс вернул отказ в обслуживании, в ответе есть ключ "{key}"'
+)
 RESPONSE_NOT_DICT = 'Ответ не в ожидаемом формате {type}'
 KEY_NOT_IN_RESPONSE = 'В ответе отсутствует ключ {key}'
 HOMEWORKS_ERROR = 'Список работ не в формате {type}'
@@ -96,10 +98,10 @@ def get_api_answer(timestamp):
     except requests.ConnectionError as error:
         raise ConnectionError(
             API_NOT_AVAILABLE.format(
-            endpoint=ENDPOINT, headers=HEADERS,
-            params=params, code=error)
+                endpoint=ENDPOINT, headers=HEADERS,
+                params=params, code=error)
         )
-    
+
     if response.status_code != 200:
         raise ConnectionError(
             CONNECTION_ERROR.format(
@@ -165,7 +167,9 @@ def main():
             if not homeworks:
                 raise ValueError(NO_HOMEWORKS)
             message = parse_status(homeworks[0])
-            current_timestamp = 0 # response.get('current_date', current_timestamp)
+            current_timestamp = response.get(
+                'current_date', current_timestamp
+            )
 
         except Exception as error:
             message = MESSAGE_ERROR.format(error=error)
