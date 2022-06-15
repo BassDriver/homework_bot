@@ -39,8 +39,10 @@ CONNECTION_ERROR = (
     'При запросе к ресурсу {endpoint} c параметрами {headers} и {params}'
     ' вернулся код ответа {code}'
 )
-API_REJECTION = (
-    'Ресурс вернул отказ в обслуживании, в ответе есть ключ "{key}"'
+API_REJECTION_KEYS = ['code', 'error']
+API_REJECTION_MESSAGE = (
+    'Ресурс вернул отказ в обслуживании при запросе к ресурсу {endpoint}'
+    ' c параметрами {headers} и {params}, ответ API "{error}"'
 )
 RESPONSE_NOT_DICT = 'Ответ не в ожидаемом формате {type}'
 KEY_NOT_IN_RESPONSE = 'В ответе отсутствует ключ {key}'
@@ -73,21 +75,18 @@ logger.addHandler(file_handler)
 
 def send_message(bot, message):
     """Отправка сообщения ботом."""
-    sent_message = False
     try:
         bot.send_message(
             chat_id=TELEGRAM_CHAT_ID,
             text=message
         )
         logger.info(MESSAGE_SENT.format(message=message))
+        return True
     except Exception as error:
         logger.exception(
             TELEGRAM_ERROR.format(message=message, error=error)
         )
-    else:
-        sent_message = True
-
-    return sent_message
+        return False
 
 
 def get_api_answer(timestamp):
@@ -95,7 +94,7 @@ def get_api_answer(timestamp):
     params = {'from_date': timestamp}
     try:
         response = requests.get(ENDPOINT, headers=HEADERS, params=params)
-    except requests.ConnectionError as error:
+    except requests.RequestException as error:
         raise ConnectionError(
             API_NOT_AVAILABLE.format(
                 endpoint=ENDPOINT, headers=HEADERS,
@@ -109,12 +108,16 @@ def get_api_answer(timestamp):
                 params=params, code=response.status_code
             )
         )
-    if 'code' in response.json():
-        raise requests.HTTPError(API_REJECTION.format(key='code'))
-    elif 'error' in response.json():
-        raise requests.HTTPError(API_REJECTION.format(key='error'))
-
-    return response.json()
+    response_json = response.json()
+    
+    for key in API_REJECTION_KEYS:
+        if key in response_json:
+            raise ValueError(API_REJECTION_MESSAGE.format(
+                endpoint=ENDPOINT, headers=HEADERS,
+                params=params, error=response_json.get(key))
+            )
+    
+    return response_json
 
 
 def check_response(response):
@@ -135,9 +138,9 @@ def parse_status(homework):
     status = homework['status']
     if status not in HOMEWORK_VERDICTS:
         raise ValueError(VERDICT_ERROR.format(status=status))
-    verdict = HOMEWORK_VERDICTS.get(status)
-
-    return HOMEWORK_STATUS_CHANGE.format(name=name, verdict=verdict)
+    return HOMEWORK_STATUS_CHANGE.format(
+        name=name, verdict=HOMEWORK_VERDICTS.get(status)
+        )
 
 
 def check_tokens():
@@ -165,25 +168,25 @@ def main():
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
             if not homeworks:
-                raise ValueError(NO_HOMEWORKS)
-            message = parse_status(homeworks[0])
-            current_timestamp = response.get(
-                'current_date', current_timestamp
-            )
+                message = NO_HOMEWORKS
+            else:
+                message = parse_status(homeworks[0])
+                
 
         except Exception as error:
             message = MESSAGE_ERROR.format(error=error)
             logger.error(message)
             if message != prev_message:
-                sent_message = send_message(bot, message)
-                if sent_message is True:
+                if send_message(bot, message):
                     prev_message = message
 
         else:
             if message != prev_message:
-                sent_message = send_message(bot, message)
-                if sent_message is True:
+                if send_message(bot, message):
                     prev_message = message
+                    current_timestamp = response.get(
+                   'current_date', current_timestamp
+                )
 
         time.sleep(RETRY_TIME)
 
