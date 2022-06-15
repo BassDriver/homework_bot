@@ -109,14 +109,14 @@ def get_api_answer(timestamp):
             )
         )
     response_json = response.json()
-    
+
     for key in API_REJECTION_KEYS:
         if key in response_json:
             raise ValueError(API_REJECTION_MESSAGE.format(
                 endpoint=ENDPOINT, headers=HEADERS,
                 params=params, error=response_json.get(key))
             )
-    
+
     return response_json
 
 
@@ -140,7 +140,7 @@ def parse_status(homework):
         raise ValueError(VERDICT_ERROR.format(status=status))
     return HOMEWORK_STATUS_CHANGE.format(
         name=name, verdict=HOMEWORK_VERDICTS.get(status)
-        )
+    )
 
 
 def check_tokens():
@@ -171,7 +171,6 @@ def main():
                 message = NO_HOMEWORKS
             else:
                 message = parse_status(homeworks[0])
-                
 
         except Exception as error:
             message = MESSAGE_ERROR.format(error=error)
@@ -185,8 +184,8 @@ def main():
                 if send_message(bot, message):
                     prev_message = message
                     current_timestamp = response.get(
-                   'current_date', current_timestamp
-                )
+                       'current_date', current_timestamp
+                    )
 
         time.sleep(RETRY_TIME)
 
