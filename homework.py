@@ -184,7 +184,7 @@ def main():
                 if send_message(bot, message):
                     prev_message = message
                     current_timestamp = response.get(
-                       'current_date', current_timestamp
+                        'current_date', current_timestamp
                     )
 
         time.sleep(RETRY_TIME)
