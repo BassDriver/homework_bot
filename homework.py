@@ -12,7 +12,9 @@ load_dotenv()
 
 
 class NoSuccessfulResponse(Exception):
+    """Исключение для неуспешного ответа API."""
     pass
+
 
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
@@ -146,7 +148,7 @@ def check_tokens():
     if missing_tokens:
         logger.critical(TOKEN_ERROR.format(name=missing_tokens))
         return False
-    
+
     return True
 
 
