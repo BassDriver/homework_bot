@@ -41,8 +41,9 @@ CONNECTION_ERROR = (
 )
 API_REJECTION_KEYS = ['code', 'error']
 API_REJECTION_MESSAGE = (
-    'Ресурс вернул отказ в обслуживании при запросе к ресурсу {endpoint}'
-    ' c параметрами {headers} и {params}, ответ API "{error}"'
+    'Получен отказ в обслуживании при запросе к ресурсу {endpoint}'
+    ' c параметрами {headers} и {params},'
+    ' ответ API с ключом "{key}" - "{error}"'
 )
 RESPONSE_NOT_DICT = 'Ответ не в ожидаемом формате {type}'
 KEY_NOT_IN_RESPONSE = 'В ответе отсутствует ключ {key}'
@@ -102,7 +103,7 @@ def get_api_answer(timestamp):
         )
 
     if response.status_code != 200:
-        raise ConnectionError(
+        raise requests.HTTPError(
             CONNECTION_ERROR.format(
                 endpoint=ENDPOINT, headers=HEADERS,
                 params=params, code=response.status_code
@@ -112,9 +113,9 @@ def get_api_answer(timestamp):
 
     for key in API_REJECTION_KEYS:
         if key in response_json:
-            raise ValueError(API_REJECTION_MESSAGE.format(
+            raise requests.JSONDecodeError(API_REJECTION_MESSAGE.format(
                 endpoint=ENDPOINT, headers=HEADERS,
-                params=params, error=response_json.get(key))
+                params=params, key=key, error=response_json.get(key))
             )
 
     return response_json
@@ -171,21 +172,17 @@ def main():
                 message = NO_HOMEWORKS
             else:
                 message = parse_status(homeworks[0])
-
-        except Exception as error:
-            message = MESSAGE_ERROR.format(error=error)
-            logger.error(message)
-            if message != prev_message:
-                if send_message(bot, message):
-                    prev_message = message
-
-        else:
-            if message != prev_message:
-                if send_message(bot, message):
+                if message != prev_message and send_message(bot, message):
                     prev_message = message
                     current_timestamp = response.get(
                         'current_date', current_timestamp
                     )
+
+        except Exception as error:
+            message = MESSAGE_ERROR.format(error=error)
+            logger.error(message)
+            if message != prev_message and send_message(bot, message):
+                prev_message = message
 
         time.sleep(RETRY_TIME)
 
