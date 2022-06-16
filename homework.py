@@ -13,6 +13,7 @@ load_dotenv()
 
 class NoSuccessfulResponse(Exception):
     """Исключение для неуспешного ответа API."""
+    
     pass
 
 
