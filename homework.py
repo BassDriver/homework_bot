@@ -11,6 +11,9 @@ from telegram import Bot
 load_dotenv()
 
 
+class NoSuccessfulResponse(Exception):
+    pass
+
 PRACTICUM_TOKEN = os.getenv('PRACTICUM_TOKEN')
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
@@ -32,16 +35,16 @@ HOMEWORK_VERDICTS = {
 }
 
 API_NOT_AVAILABLE = (
-    'При запросе к ресурсу {endpoint} c параметрами {headers} и {params}'
+    'При запросе к ресурсу {url} c параметрами {headers} и {params}'
     ' сервис недоступен {code}'
 )
 CONNECTION_ERROR = (
-    'При запросе к ресурсу {endpoint} c параметрами {headers} и {params}'
+    'При запросе к ресурсу {url} c параметрами {headers} и {params}'
     ' вернулся код ответа {code}'
 )
 API_REJECTION_KEYS = ['code', 'error']
 API_REJECTION_MESSAGE = (
-    'Получен отказ в обслуживании при запросе к ресурсу {endpoint}'
+    'Получен отказ в обслуживании при запросе к ресурсу {url}'
     ' c параметрами {headers} и {params},'
     ' ответ API с ключом "{key}" - "{error}"'
 )
@@ -49,8 +52,7 @@ RESPONSE_NOT_DICT = 'Ответ не в ожидаемом формате {type}
 KEY_NOT_IN_RESPONSE = 'В ответе отсутствует ключ {key}'
 HOMEWORKS_ERROR = 'Список работ не в формате {type}'
 VERDICT_ERROR = 'Получен неизвестный статус работы {status}'
-TOKEN_ERROR = 'Отсутствует переменная окружения {name}'
-NO_HOMEWORKS = 'Отсутствуют данные о домашних работах'
+TOKEN_ERROR = 'Отсутствуют переменные окружения: {name}'
 HOMEWORK_STATUS_CHANGE = 'Изменился статус проверки работы "{name}". {verdict}'
 MESSAGE_ERROR = 'Сбой в работе программы: {error}'
 MESSAGE_ERROR_SENT = 'Сообщение об ошибке "{message}" успешно отправлено'
@@ -93,29 +95,23 @@ def send_message(bot, message):
 def get_api_answer(timestamp):
     """Обработка ответа от API."""
     params = {'from_date': timestamp}
+    api = dict(url=ENDPOINT, headers=HEADERS, params=params)
     try:
-        response = requests.get(ENDPOINT, headers=HEADERS, params=params)
+        response = requests.get(**api)
     except requests.RequestException as error:
-        raise ConnectionError(
-            API_NOT_AVAILABLE.format(
-                endpoint=ENDPOINT, headers=HEADERS,
-                params=params, code=error)
-        )
+        raise ConnectionError(API_NOT_AVAILABLE.format(code=error, **api))
 
     if response.status_code != 200:
-        raise requests.HTTPError(
-            CONNECTION_ERROR.format(
-                endpoint=ENDPOINT, headers=HEADERS,
-                params=params, code=response.status_code
-            )
+        raise NoSuccessfulResponse(
+            CONNECTION_ERROR.format(code=response.status_code, **api)
         )
     response_json = response.json()
 
     for key in API_REJECTION_KEYS:
         if key in response_json:
-            raise requests.JSONDecodeError(API_REJECTION_MESSAGE.format(
-                endpoint=ENDPOINT, headers=HEADERS,
-                params=params, key=key, error=response_json.get(key))
+            raise requests.exceptions.InvalidJSONError(
+                API_REJECTION_MESSAGE.format(
+                    key=key, error=response_json.get(key), **api)
             )
 
     return response_json
@@ -140,18 +136,18 @@ def parse_status(homework):
     if status not in HOMEWORK_VERDICTS:
         raise ValueError(VERDICT_ERROR.format(status=status))
     return HOMEWORK_STATUS_CHANGE.format(
-        name=name, verdict=HOMEWORK_VERDICTS.get(status)
+        name=name, verdict=HOMEWORK_VERDICTS[status]
     )
 
 
 def check_tokens():
     """Проверка токенов."""
-    tokens_ok = True
-    for name in TOKENS_NAMES:
-        if not globals()[name]:
-            logger.critical(TOKEN_ERROR.format(name=name))
-            tokens_ok = False
-    return tokens_ok
+    missing_tokens = [name for name in TOKENS_NAMES if not globals()[name]]
+    if missing_tokens:
+        logger.critical(TOKEN_ERROR.format(name=missing_tokens))
+        return False
+    
+    return True
 
 
 def main():
@@ -168,9 +164,7 @@ def main():
         try:
             response = get_api_answer(current_timestamp)
             homeworks = check_response(response)
-            if not homeworks:
-                message = NO_HOMEWORKS
-            else:
+            if homeworks:
                 message = parse_status(homeworks[0])
                 if message != prev_message and send_message(bot, message):
                     prev_message = message
